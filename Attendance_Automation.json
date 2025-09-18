@@ -1,0 +1,1607 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ebde29d2-eed0-401f-8a32-28f270e2f7f4",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        -640
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression"
+            }
+          ]
+        }
+      },
+      "id": "d30dd9c4-cf77-4888-876c-503ae7977766",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "sheetId": "1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc",
+        "range": "sheet!A1:J",
+        "options": {}
+      },
+      "name": "Read Attendance",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        -1360,
+        -528
+      ],
+      "id": "47f46352-ec0f-4ff9-bb0a-b908fee4d5c9",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zr7eu3sJuJSIWoUj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Set 'today' to June 30, 2025 (last day of your data)\nconst today = new Date(2025, 5, 30); // JS months: 0=Jan, so 5=June\n\n// Set 'sevenDaysAgo' to June 24, 2025 (7 days before June 30, inclusive)\nconst sevenDaysAgo = new Date(today);\nsevenDaysAgo.setDate(today.getDate() - 6); // For 7 days: today + 6 days before\n\nconst targetEmployees = [\n  'Maria Garcia',\n  'Ahmed Singh', \n  'Fatima Patel',\n  'Michael Green',\n  'John Lee'\n];\n\nfunction parseDDMMYYYY(str) {\n  const [day, month, year] = str.split('/').map(Number);\n  return new Date(year, month - 1, day);\n}\n\nconst filteredRecords = [];\n\nfor (const item of $input.all()) {\n  const employeeName = item.json.Employee;\n  const recordDate = parseDDMMYYYY(item.json.Date);\n\n  if (\n    targetEmployees.includes(employeeName) &&\n    recordDate >= sevenDaysAgo &&\n    recordDate <= today\n  ) {\n    filteredRecords.push(item);\n  }\n}\n\nconsole.log(`Processing ${targetEmployees.length} employees:`, targetEmployees);\nconsole.log(`Found ${filteredRecords.length} records for the last 7 days`);\n\nreturn filteredRecords;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        592
+      ],
+      "id": "a0ef7244-a624-484b-aa8c-8579bab8f47b",
+      "name": "Filter 5 Employees & 7 Days"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over each input item\nfor (const item of $input.all()) {\n  const timeIn = item.json.TimeIn;\n  const timeOut = item.json.TimeOut;\n\n  // Check if both TimeIn and TimeOut are \"-\"\n  if ((timeIn === \"-\" || !timeIn) && (timeOut === \"-\" || !timeOut)) {\n    item.json.Status = \"Absent\";\n  }\n\n  // Optionally initialize total hours if needed\n  if (!item.json['Total Hours Worked']) {\n    item.json['Total Hours Worked'] = 0;\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        -528
+      ],
+      "id": "88ac21c0-4fbd-49c6-b9bc-9f5ae2563bf6",
+      "name": "Mark Absent Records"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ 'Attendance Approval - ' + $json.Employee }}",
+        "formDescription": "={{ 'Please review the absence request for ' + $json.Employee + ' (ID: ' + $json.EmployeeID + ') on ' + $json.Date + '.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Employee Name",
+              "placeholder": "={{ $json.Employee }}"
+            },
+            {
+              "fieldLabel": "Employee ID",
+              "placeholder": "={{ $json.EmployeeID }}"
+            },
+            {
+              "fieldLabel": "Absence Date",
+              "placeholder": "={{ $json.Date }}"
+            },
+            {
+              "fieldLabel": "Approval Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve as Annual Leave"
+                  },
+                  {
+                    "option": "Keep as Absent"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Manager Comments",
+              "fieldType": "textarea",
+              "placeholder": "Add any notes or comments here..."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e6b56955-c1ca-4ca8-84d2-c8d3d8225cd9",
+      "name": "Wait for Form Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2384,
+        -2512
+      ],
+      "webhookId": "fda88c78-878a-4de8-8760-3d53d3fd4651"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = [];\n\nfor (const item of $input.all()) {\n  const originalData = item.json;\n\n  // Use top-level keys for approval\n  const decision = originalData['Approval Decision'] || 'Keep as Absent';\n  const normalizedDecision = decision.toLowerCase().trim();\n  const comments = originalData['Manager Comments'] || '';\n  \n  const approvalResponse = normalizedDecision === 'approve as annual leave' ? 'approve' : 'reject';\n\n  items.push({\n    json: {\n      ...originalData,\n      approvalResponse,\n      approvalDecision: decision,\n      managerComments: comments,\n      approvedAt: new Date().toISOString(),\n    }\n  });\n}\n\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        -2320
+      ],
+      "id": "5ac23c5b-e98f-4d6e-8de2-e3fcadf332c0",
+      "name": "Process Form Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approvalResponse }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "check-approval"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "00c3b2dd-76d1-449c-bff3-a5caa4a6f113",
+      "name": "Check Approval",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -2320
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "91481c4a-6d10-4d91-9811-58b471cc436b",
+      "name": "Set as Annual Leave",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        3616,
+        -1040
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "065fe389-ee45-422a-ad1f-c35f9692f160",
+      "name": "Keep as Absent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        3632,
+        -896
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "99bd5600-b63c-4332-a37f-6c26fcdbb1d8",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        4352,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc",
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 564489594,
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit#gid=564489594"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EmployeeID": "={{ $json.EmployeeID }}",
+            "Date": "={{ $json.Date }}",
+            "Status": "={{ $json.Status }}"
+          },
+          "matchingColumns": [
+            "Date"
+          ],
+          "schema": [
+            {
+              "id": "EmployeeID",
+              "displayName": "EmployeeID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Employee",
+              "displayName": "Employee",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TimeIn",
+              "displayName": "TimeIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "TimeOut",
+              "displayName": "TimeOut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Total Hours Worked",
+              "displayName": "Total Hours Worked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LeaveRequested",
+              "displayName": "LeaveRequested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "676f2c9f-ce11-48c7-a8f6-1db36da9da33",
+      "name": "Update Attendance Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        4560,
+        -112
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zr7eu3sJuJSIWoUj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.Status || '').toString().trim().toLowerCase() }}",
+                    "rightValue": "absent",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "absent-status"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "absent"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ (!$json.TimeIn || $json.TimeIn.toString().trim() === '' || $json.TimeIn.toString().trim() === '-') ? 'empty' : 'value' }}",
+                    "rightValue": "value",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "deviation-in"
+                  },
+                  {
+                    "leftValue": "={{ (!$json.TimeOut || $json.TimeOut.toString().trim() === '' || $json.TimeOut.toString().trim() === '-') ? 'empty' : 'value' }}",
+                    "rightValue": "empty",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "deviation-out"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "deviation"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "allMatchingOutputs": false
+        }
+      },
+      "id": "f73c6bf4-aca6-4e51-b949-ee673b700ccf",
+      "name": "Attendance Logic Check2",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -800,
+        -576
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Leave Request",
+        "formDescription": "={{ 'Change leave request status for ' + $json.Employee + ' (ID: ' + $json.EmployeeID + ') on ' + $json.Date + '.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Employee Name",
+              "placeholder": "={{ $json.Employee }}"
+            },
+            {
+              "fieldLabel": "Employee ID",
+              "placeholder": "={{ $json.EmployeeID }}"
+            },
+            {
+              "fieldLabel": "Absence Date",
+              "placeholder": "={{ $json.Date }}"
+            },
+            {
+              "fieldLabel": "Leave Requested?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Comments",
+              "fieldType": "textarea",
+              "placeholder": "Add any notes or comments here..."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b858d093-8a78-4546-8afe-30e352d55437",
+      "name": "Leave Request Form",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        -1152
+      ],
+      "webhookId": "fda88c78-878a-4de8-8760-3d53d3fd4651"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ 'deviation Request Update - ' + $json.Employee }}",
+        "formDescription": "={{ 'Change deviation status for ' + $json.Employee + ' (ID: ' + $json.EmployeeID + ') on ' + $json.Date + '.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Employee Name",
+              "placeholder": "={{ $json.Employee }}"
+            },
+            {
+              "fieldLabel": "Employee ID",
+              "placeholder": "={{ $json.EmployeeID }}"
+            },
+            {
+              "fieldLabel": "Deviation Date",
+              "placeholder": "={{ $json.Date }}"
+            },
+            {
+              "fieldLabel": "Deviation fix Requested?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Comments",
+              "fieldType": "textarea",
+              "placeholder": "Add any notes or comments here..."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4ea63039-0144-44b5-8849-60d1aeaaa96d",
+      "name": "Leave Request Form1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        64
+      ],
+      "webhookId": "fda88c78-878a-4de8-8760-3d53d3fd4651"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nlet status = j.Status || \"Absent\";\n\nif ((j.approvalDecision || \"\").toLowerCase().trim() === \"approve as annual leave\") {\n  status = \"Annual Leave\";\n}\n\nreturn [{\n  json: {\n    EmployeeID: j['Employee ID'] || j.EmployeeID || \"\",\n    Employee: j['Employee Name'] || j.Employee || \"\",\n    Date: j['Absence Date'] || j.Date || \"\",\n    TimeIn: j.TimeIn || \"\",\n    TimeOut: j.TimeOut || \"\",\n    Status: status,\n    \"Total Hours Worked\": j[\"Total Hours Worked\"] || \"\",\n    LeaveRequested: j.LeaveRequested || \"\",\n\n\n    \n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        -976
+      ],
+      "id": "fb49835d-fc7b-4aff-8c1e-bd38201c46ff",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ 'deviation Approval - ' + $json.Employee }}",
+        "formDescription": "={{ 'Please review the deviation request for ' + $json.Employee + ' (ID: ' + $json.EmployeeID + ') on ' + $json.Date + '.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Employee Name",
+              "placeholder": "={{ $json.Employee }}"
+            },
+            {
+              "fieldLabel": "Employee ID",
+              "placeholder": "={{ $json.EmployeeID }}"
+            },
+            {
+              "fieldLabel": "Deviation Date",
+              "placeholder": "={{ $json.Date }}"
+            },
+            {
+              "fieldLabel": "Approval Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve as Present"
+                  },
+                  {
+                    "option": "Keep as Absent"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Manager Comments",
+              "fieldType": "textarea",
+              "placeholder": "Add any notes or comments here..."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e7ee3411-72fb-483a-89c3-44b4c9c2a460",
+      "name": "Wait for Form Approval1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        -2000
+      ],
+      "webhookId": "fda88c78-878a-4de8-8760-3d53d3fd4651"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = [];\n\nfor (const item of $input.all()) {\n  const originalData = item.json;\n\n  // Use top-level keys for approval\n  const decision = originalData['Approval Decision'] || 'Keep as Absent';\n  const normalizedDecision = decision.toLowerCase().trim();\n  const comments = originalData['Manager Comments'] || '';\n  \n  const approvalResponse = normalizedDecision === 'Approve as Present' ? 'approve' : 'reject';\n\n  items.push({\n    json: {\n      ...originalData,\n      approvalResponse,\n      approvalDecision: decision,\n      managerComments: comments,\n      approvedAt: new Date().toISOString(),\n    }\n  });\n}\n\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        -2000
+      ],
+      "id": "e6e6fdc6-9715-4940-a944-0e50bf63af26",
+      "name": "Process Form Response1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approvalDecision }}",
+              "rightValue": "Approve as Present",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "check-approval"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1b99534-f4d1-4c85-8f12-753eaaf227e9",
+      "name": "Check Approval1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        -640
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "96c03434-ca68-4714-9b5f-3f7e70bff02e",
+      "name": "Keep as Absent1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        3792,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nlet status = j.Status || \"Absent\";\n\nif ((j.approvalDecision || \"\").toLowerCase().trim() === \"Approve as Present\") {\n  status = \"Present\";\n}\n\nreturn [{\n  json: {\n    EmployeeID: j['Employee ID'] || j.EmployeeID || \"\",\n    Employee: j['Employee Name'] || j.Employee || \"\",\n    Date: j['Absence Date'] || j.Date || \"\",\n    TimeIn: j.TimeIn || \"\",\n    TimeOut: j.TimeOut || \"\",\n    Status: status,\n    \"Total Hours Worked\": j[\"Total Hours Worked\"] || \"\",\n    LeaveRequested: j.LeaveRequested || \"\",\n\n\n    \n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4064,
+        -624
+      ],
+      "id": "83817d66-86e0-4242-abdd-a821a3066304",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e3353478-354f-4664-851b-de90fb16a6b3",
+      "name": "Set as Present1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        3792,
+        -640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6026a0ab-eaeb-4fad-9b94-f421de4df266",
+              "leftValue": "={{ $json['Leave Requested?'] }}",
+              "rightValue": "Yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        352,
+        -864
+      ],
+      "id": "519166b5-b871-4293-95d7-665a3d86e4ce",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        304,
+        -288
+      ],
+      "id": "b37e3fdb-229f-4bb5-b2e2-31f00fb6fe42",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6026a0ab-eaeb-4fad-9b94-f421de4df266",
+              "leftValue": "={{ $json['Deviation fix Requested?'] }}",
+              "rightValue": "Yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        48
+      ],
+      "id": "f277be63-7b6b-45bd-8975-c2156a71beb9",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        592
+      ],
+      "id": "0a5935ef-1536-491b-8142-419c0be6fce3",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -208,
+        -1152
+      ],
+      "id": "63d0ca80-aafa-49f4-bfc9-ce56ecccb6a9",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        -2144
+      ],
+      "id": "075f4c4b-6e94-45f3-9d67-bb1fc1c0ec78",
+      "name": "Loop Over Items2"
+    },
+    {
+      "parameters": {
+        "path": "925d7c85-18e6-46c2-b63a-f1d2cec4cd9f",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        576
+      ],
+      "id": "9ce95196-fa96-43c4-b74d-028499f1eb60",
+      "name": "Webhook",
+      "webhookId": "925d7c85-18e6-46c2-b63a-f1d2cec4cd9f"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc",
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 564489594,
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit#gid=564489594"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EmployeeID": "={{ $json.query.employeeId }}",
+            "Status": "={{$json.query.type === 'annualLeave' && $json.query.action=== 'approve' ? 'Annual Leave Approved' :\n  $json.query.type === 'annualLeave' && $json.query.action=== 'reject' ? 'Annual Leave Rejected' :\n  $json.query.type=== 'deviation' && $json.query.action=== 'approve' ? 'Deviation Approved' :\n  $json.query.type === 'deviation' && $json.query.action=== 'reject' ? 'Deviation Rejected' :\n  'Unknown'}}\n",
+            "Date": "={{ $json.query.date }}",
+            "Employee": "={{ $json.query.EmployeeName }}"
+          },
+          "matchingColumns": [
+            "EmployeeID"
+          ],
+          "schema": [
+            {
+              "id": "EmployeeID",
+              "displayName": "EmployeeID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Employee",
+              "displayName": "Employee",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TimeIn",
+              "displayName": "TimeIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TimeOut",
+              "displayName": "TimeOut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total Hours Worked",
+              "displayName": "Total Hours Worked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LeaveRequested",
+              "displayName": "LeaveRequested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -224,
+        576
+      ],
+      "id": "a85e4273-9dff-40b7-b933-649a8f2cf96d",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zr7eu3sJuJSIWoUj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -48,
+        80
+      ],
+      "id": "36af7f46-5221-4b42-8d0b-1dd109b34b2a",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc",
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 564489594,
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit#gid=564489594"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EmployeeID": "={{ $json.EmployeeID }}",
+            "Employee": "={{ $json.Employee }}",
+            "Date": "={{ $json.Date }}",
+            "TimeIn": "={{ $json.TimeIn }}",
+            "TimeOut": "={{ $json.TimeOut }}",
+            "Status": "={{ $json.Status }}",
+            "Total Hours Worked": "={{ $json['Total Hours Worked'] }}"
+          },
+          "matchingColumns": [
+            "EmployeeID"
+          ],
+          "schema": [
+            {
+              "id": "EmployeeID",
+              "displayName": "EmployeeID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Employee",
+              "displayName": "Employee",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TimeIn",
+              "displayName": "TimeIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TimeOut",
+              "displayName": "TimeOut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total Hours Worked",
+              "displayName": "Total Hours Worked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LeaveRequested",
+              "displayName": "LeaveRequested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        480,
+        -288
+      ],
+      "id": "6cd900b0-48ae-4fe5-b7db-7c57f0cf8942",
+      "name": "Keep Same",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zr7eu3sJuJSIWoUj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc",
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 564489594,
+          "mode": "list",
+          "cachedResultName": "sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1CIBBiHqB_Uw4Kv6HC1BIopqMl45wmQz5Ko13IVHm6uc/edit#gid=564489594"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        368,
+        592
+      ],
+      "id": "8a31a96f-241d-484f-b267-b2fb42d7de17",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zr7eu3sJuJSIWoUj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "wasihacked21@gmail.com",
+        "toEmail": "muhammadhutaib10c16652@gmail.com",
+        "subject": "={{ 'Deviation Approval Required - ' + $json['Employee Name'] + ' - ' +$json['Deviation Date']  }}",
+        "html": "=<p>Dear Manager,</p>\n<p>A <strong>Deviation</strong> approval request has been submitted for:</p>\n<ul>\n  <li><strong>Employee:</strong> {{$json[\"Employee Name\"]}}</li>\n  <li><strong>Employee ID:</strong> {{$json[\"Employee ID\"]}}</li>\n  <li><strong>Date:</strong> {{$json[\"Deviation Date\"]}}</li>\n</ul>\n<p>\n  <a href=\"http://localhost:5678/webhook-test/925d7c85-18e6-46c2-b63a-f1d2cec4cd9f?employeeId={{$json['Employee ID']}}&date={{$json['Deviation Date']}}&EmployeeName={{ $json['Employee Name'] }}&type=deviation&action=approve\" style=\"padding: 8px 16px; background: #4caf50; color: white; text-decoration: none; border-radius: 4px;\">Approve</a>\n  &nbsp;\n  <a href=\"http://localhost:5678/webhook-test/925d7c85-18e6-46c2-b63a-f1d2cec4cd9f?employeeId={{$json['Employee ID']}}&date={{$json['Deviation Date']}}&EmployeeName={{ $json['Employee Name'] }}&type=deviation&action=reject\" style=\"padding: 8px 16px; background: #f44336; color: white; text-decoration: none; border-radius: 4px;\">Reject</a>\n</p>\n<p>Thank you.</p>\n",
+        "options": {}
+      },
+      "id": "5098e865-7926-41aa-a332-ca1de6b8c54e",
+      "name": "Deviation Approval Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        768,
+        -32
+      ],
+      "webhookId": "99fda03c-fe51-42b5-a1d7-934f8bcf30b8",
+      "credentials": {
+        "smtp": {
+          "id": "57a7dawDBd8i29pa",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "wasihacked21@gmail.com",
+        "toEmail": "muhammadhutaib10c16652@gmail.com",
+        "subject": "={{ 'Attendance Approval Required - ' + $json['Employee Name']+ ' - ' + $json['Absence Date']}}",
+        "html": "=<p>Dear Manager,</p>\n<p>An <strong>Annual Leave</strong> approval request has been submitted for:</p>\n<ul>\n  <li><strong>Employee:</strong> {{$json[\"Employee Name\"]}}</li>\n  <li><strong>Employee ID:</strong> {{$json[\"Employee ID\"]}}</li>\n  <li><strong>Date:</strong> {{$json['Absence Date']}}</li>\n</ul>\n<p>\n  <a href=\"http://localhost:5678/webhook-test/925d7c85-18e6-46c2-b63a-f1d2cec4cd9f?employeeId={{$json['Employee ID']}}&date={{$json['Absence Date']}}&EmployeeName={{$json['Employee Name']}}&type=annualLeave&action=approve\" style=\"padding: 8px 16px; background: #4caf50; color: white; text-decoration: none; border-radius: 4px;\">Approve</a>\n  &nbsp;\n  <a href=\"http://localhost:5678/webhook-test/925d7c85-18e6-46c2-b63a-f1d2cec4cd9f?employeeId={{$json['Employee ID']}}&date={{$json['Absence Date']}}&EmployeeName={{$json['Employee Name']}}&type=annualLeave&action=reject\" style=\"padding: 8px 16px; background: #f44336; color: white; text-decoration: none; border-radius: 4px;\">Reject</a>\n</p>\n<p>Thank you.</p>\n",
+        "options": {}
+      },
+      "id": "e87c1913-383a-4b75-bf95-6fabe30779e9",
+      "name": "Annual Leave Approval Email2",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        656,
+        -960
+      ],
+      "webhookId": "99fda03c-fe51-42b5-a1d7-934f8bcf30b8",
+      "credentials": {
+        "smtp": {
+          "id": "57a7dawDBd8i29pa",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Attendance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Read Attendance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Attendance": {
+      "main": [
+        [
+          {
+            "node": "Mark Absent Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Absent Records": {
+      "main": [
+        [
+          {
+            "node": "Attendance Logic Check2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Form Approval": {
+      "main": [
+        [
+          {
+            "node": "Process Form Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Form Response": {
+      "main": [
+        [
+          {
+            "node": "Check Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval": {
+      "main": [
+        [
+          {
+            "node": "Set as Annual Leave",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep as Absent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set as Annual Leave": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep as Absent": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Update Attendance Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Attendance Sheet": {
+      "main": [
+        []
+      ]
+    },
+    "Attendance Logic Check2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leave Request Form": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leave Request Form1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Form Approval1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval1": {
+      "main": [
+        [
+          {
+            "node": "Set as Present1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep as Absent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep as Absent1": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Form Response1": {
+      "main": [
+        [
+          {
+            "node": "Check Approval1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set as Present1": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Annual Leave Approval Email2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Deviation Approval Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Keep Same",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leave Request Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items2": {
+      "main": [
+        [
+          {
+            "node": "Process Form Response1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Form Approval1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leave Request Form1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Filter 5 Employees & 7 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deviation Approval Email": {
+      "main": [
+        []
+      ]
+    },
+    "Annual Leave Approval Email2": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "add1adc5-1d7e-4805-b843-9b6481f86b3c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "40182548c9e913492c1010bcd91158a00d2340104928625250c44e54b5145d8b"
+  },
+  "id": "ORIEEOEX0ARVakwl",
+  "tags": []
+}
